@@ -1,3 +1,5 @@
+#include"SineWavePreCalculator.h"
+
 const int PWMFreq = 5000;
 const int PWMChannelLeft = 0;
 const int PWMPinLeft = 27;
@@ -37,8 +39,9 @@ void setup()
   digitalWrite(HighMosfetPinLeft, LOW);
   pinMode(HighMosfetPinRight, OUTPUT);
   digitalWrite(HighMosfetPinRight, LOW);
-  degreeDutyCycles = calculateDegreeDutyCycles();
-  degreeCycles = calculateDegreeCycles();
+  SineWavePreCalculator *sineWavePreCalculator = new SineWavePreCalculator(MAX_DUTY_CYCLE, transitionDeadband);
+  degreeDutyCycles = sineWavePreCalculator->calculateDegreeDutyCycles();
+  degreeCycles = sineWavePreCalculator->calculateDegreeCycles();
   ledcSetup(PWMChannelLeft, PWMFreq, PWMResolution);
   ledcAttachPin(PWMPinLeft, PWMChannelLeft);
   ledcSetup(PWMChannelRight, PWMFreq, PWMResolution);
@@ -70,39 +73,6 @@ void pwmLoop(void * pvParameters) {
     controlBootstrap(currentTime);
     vTaskDelay(1);
   }
-}
-
-int *calculateDegreeDutyCycles() {
-  int *dutyCycles = new int[360];
-  for(int degree = 0; degree < 360; degree++) {
-    float angleSine = sin(toRadians(degree));
-    float normalizedSine = angleSine >= 0 ? angleSine : -1*angleSine;
-    if(normalizedSine <= transitionDeadband) {
-      normalizedSine = 0;
-    }
-    int dutyCycle = (int) ((1 - normalizedSine) * MAX_DUTY_CYCLE);
-    dutyCycles[degree] = dutyCycle;
-  }
-  return dutyCycles;
-}
-
-int *calculateDegreeCycles() {
-  int *cycles = new int[360];
-  for(int degree = 0; degree < 360; degree++) {
-    float angleSine = sin(toRadians(degree));
-    if(angleSine > transitionDeadband) {
-      cycles[degree] = 1;
-    } else if(angleSine < (-1*transitionDeadband)) {
-      cycles[degree] = -1;
-    } else {
-      cycles[degree] = 0;
-    }
-  }
-  return cycles;
-}
-
-float toRadians(float valueInDegrees) {
-  return (valueInDegrees/360)*(2*PI);
 }
 
 void updatePwm(unsigned long currentTime) {
