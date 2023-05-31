@@ -1,4 +1,5 @@
 #include"SineWavePreCalculator.h"
+#include"ControlledBootstrap.h"
 
 const int PWMFreq = 5000;
 const int PWMChannelLeft = 0;
@@ -15,13 +16,14 @@ float targetFrequency = 0;
 float outputFrequency = 0;
 float outputPeriodMicros = (1/outputFrequency)*microsInSecond;
 unsigned long cycleStartTime = 0;
-unsigned long bootstrapStartTime = 0;
 unsigned long rampStartTime = 0;
 const int rampTimeMicros = 5*microsInSecond;
-const int bootstrapOffTime = 100000; //us
-const int bootstrapOnTime = 2000; //us
-const int bootstrapPin = 15;
 const float transitionDeadband = 0.1;
+
+// Bootstrap Config
+const unsigned char bootstrapPin = 15;
+const unsigned int bootstrapOnTime = 2000; //us
+const unsigned int bootstrapOffTime = 100000; //us
 
 int lastCycle = 0;
 
@@ -30,15 +32,16 @@ TaskHandle_t pwmSineGeneratorTask;
 int *degreeDutyCycles;
 int *degreeCycles;
 
+ControlledBootstrap *bootstrap;
+
 void setup()
 {  
   Serial.begin(115200);
-  pinMode(bootstrapPin, OUTPUT);
-  digitalWrite(bootstrapPin, HIGH);
   pinMode(HighMosfetPinLeft, OUTPUT);
   digitalWrite(HighMosfetPinLeft, LOW);
   pinMode(HighMosfetPinRight, OUTPUT);
   digitalWrite(HighMosfetPinRight, LOW);
+  bootstrap = new ControlledBootstrap(bootstrapPin, bootstrapOnTime, bootstrapOffTime);
   SineWavePreCalculator *sineWavePreCalculator = new SineWavePreCalculator(MAX_DUTY_CYCLE, transitionDeadband);
   degreeDutyCycles = sineWavePreCalculator->calculateDegreeDutyCycles();
   degreeCycles = sineWavePreCalculator->calculateDegreeCycles();
@@ -55,7 +58,6 @@ void setup()
       &pwmSineGeneratorTask,  /* Task handle. */
       0); /* Core where the task should run */
   cycleStartTime = micros();
-  bootstrapStartTime = cycleStartTime;
 }
 
 void loop()
@@ -70,7 +72,7 @@ void pwmLoop(void * pvParameters) {
   while(1) {
     unsigned long currentTime = micros();
     updatePwm(currentTime);
-    controlBootstrap(currentTime);
+    bootstrap->refresh(currentTime);
     vTaskDelay(1);
   }
 }
@@ -140,14 +142,5 @@ void implementRamp(unsigned long currentTime) {
   } else {
     outputFrequency = targetFrequency;
     outputPeriodMicros = (1/outputFrequency)*microsInSecond;
-  }
-}
-
-void controlBootstrap(unsigned long currentTime) {
-  if(currentTime >= (bootstrapStartTime + bootstrapOffTime + bootstrapOnTime)) {
-    digitalWrite(bootstrapPin, LOW);
-    bootstrapStartTime += bootstrapOffTime + bootstrapOnTime;
-  } else if(currentTime >= (bootstrapStartTime + bootstrapOffTime)){
-    digitalWrite(bootstrapPin, HIGH);
   }
 }
